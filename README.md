@@ -8,7 +8,7 @@ You need to have an MPI library (such as OpenMPI) installed on your machine to c
 
 ## Usage
 
-To serialize 
+Serialize the input
 ```sh
 gcc serialize.c -o target/serialize
 ./target/serialize input.txt output/serialized_output.txt
