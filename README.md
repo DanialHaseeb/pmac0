@@ -48,6 +48,6 @@ The first argument after the program name must be either "sign" or "verify":
 
 This is a basic implementation of PMAC0 and is not suitable for handling sensitive data or use in a production environment.
 
-In particular, the secret keys used for the PMAC0 computations are hardcoded and not secret at all, and the functions F1 and F2, which in a real PMAC implementation would be cryptographic pseudorandom functions, are here simple one-time pads.
+In particular, the secret keys used for the PMAC0 computations are hardcoded and not secret at all, and the functions F1 and F2, which in a real PMAC implementation would be cryptographic pseudorandom functions, are here can be simple one-time pads.
 
 Moreover, this program does not handle errors robustly and is not optimised for performance. Its purpose is to illustrate how PMAC0 and MPI can be used together to compute a MAC in parallel.
