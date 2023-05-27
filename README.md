@@ -23,7 +23,7 @@ mpicc pmac0.c -o pmac0
 Then, run it with mpirun (or your equivalent command to start an MPI program), like so:
 
 ```sh
-mpirun -np 4 pmac0 <sign|verify> <f1f2(otp|vigenere|rc4)> <filepath> [<tagfilepath>]
+mpirun -np 4 pmac0 <sign|verify> <filepath> <f1f2(otp|vigenere|rc4)>  [<tagfilepath>]
 ```
 
 Here, "-np 4" indicates that we want to run the program with 4 processes. You can adjust this to your preference.
@@ -35,7 +35,7 @@ The first argument after the program name must be either "sign" or "verify":
   For example:
 
   ```sh
-  mpirun -np 4 pmac0 sign otp input.txt
+  mpirun -np 4 pmac0 sign input.txt otp
   ```
 
   This will create a file named `input.txt.tag` in the same directory as `input.txt`, containing the computed PMAC tag.
@@ -45,7 +45,7 @@ The first argument after the program name must be either "sign" or "verify":
   For example:
 
   ```sh
-  mpirun -np 4 pmac0 verify otp input.txt input.txt.tag
+  mpirun -np 4 pmac0 verify input.txt otp input.txt.tag
   ```
 
   The program will output either "Tag verification succeeded" if the computed tag matches the provided tag, or "Tag verification failed" otherwise.
