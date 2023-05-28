@@ -6,15 +6,137 @@
 #define P 4294967291 // Large prime number for modular arithmetic
 
 // One Time Pad-like function for computing intermediate values in PMAC
-uint64_t F1(uint64_t k1, uint64_t r)
+uint64_t F1_OTP(uint64_t k1, uint64_t r)
 {
   return r ^ k1;
 }
 
 // One Time Pad-like function for computing final tag in PMAC
-uint64_t F2(uint64_t k2, uint64_t t)
+uint64_t F2_OTP(uint64_t k2, uint64_t t)
 {
   return t ^ k2;
+}
+
+// F1 and F2 using Vigenere cipher
+uint64_t F1_vigenere(uint64_t k1, uint64_t r)
+{
+  uint64_t t = 0;
+  uint64_t mask = 0;
+  uint64_t m = 0;
+
+  for (int i = 0; i < 8; ++i)
+  {
+    mask = (mask + k1) % P;
+    m = (r >> (8 * i)) & 0xFF;
+    t ^= (m + mask) % P;
+  }
+
+  return t;
+}
+
+uint64_t F2_vigenere(uint64_t k2, uint64_t t)
+{
+  uint64_t mask = 0;
+  uint64_t m = 0;
+  uint64_t r = 0;
+
+  for (int i = 0; i < 8; ++i)
+  {
+    mask = (mask + k2) % P;
+    m = (t >> (8 * i)) & 0xFF;
+    r ^= (m + mask) % P;
+  }
+
+  return r;
+}
+
+// F1 and F2 using RC4
+uint64_t F1_RC4(uint64_t k1, uint64_t r)
+{
+  uint64_t t = 0;
+  uint64_t mask = 0;
+  uint64_t m = 0;
+
+  uint8_t S[256];
+  uint8_t T[256];
+
+  // Initialize S and T
+  for (int i = 0; i < 256; ++i)
+  {
+    S[i] = i;
+    T[i] = (k1 >> (8 * i)) & 0xFF;
+  }
+
+  // Initial permutation of S
+  int j = 0;
+  for (int i = 0; i < 256; ++i)
+  {
+    j = (j + S[i] + T[i]) % 256;
+    uint8_t temp = S[i];
+    S[i] = S[j];
+    S[j] = temp;
+  }
+
+  // Stream generation
+  int i = 0;
+  j = 0;
+  for (int k = 0; k < 8; ++k)
+  {
+    i = (i + 1) % 256;
+    j = (j + S[i]) % 256;
+    uint8_t temp = S[i];
+    S[i] = S[j];
+    S[j] = temp;
+
+    m = (r >> (8 * k)) & 0xFF;
+    t ^= (m + S[(S[i] + S[j]) % 256]) % P;
+  }
+
+  return t;
+}
+
+uint64_t F2_RC4(uint64_t k2, uint64_t t)
+{
+  uint64_t mask = 0;
+  uint64_t m = 0;
+  uint64_t r = 0;
+
+  uint8_t S[256];
+  uint8_t T[256];
+
+  // Initialize S and T
+  for (int i = 0; i < 256; ++i)
+  {
+    S[i] = i;
+    T[i] = (k2 >> (8 * i)) & 0xFF;
+  }
+
+  // Initial permutation of S
+  int j = 0;
+  for (int i = 0; i < 256; ++i)
+  {
+    j = (j + S[i] + T[i]) % 256;
+    uint8_t temp = S[i];
+    S[i] = S[j];
+    S[j] = temp;
+  }
+
+  // Stream generation
+  int i = 0;
+  j = 0;
+  for (int k = 0; k < 8; ++k)
+  {
+    i = (i + 1) % 256;
+    j = (j + S[i]) % 256;
+    uint8_t temp = S[i];
+    S[i] = S[j];
+    S[j] = temp;
+
+    m = (t >> (8 * k)) & 0xFF;
+    r ^= (m + S[(S[i] + S[j]) % 256]) % P;
+  }
+
+  return r;
 }
 
 // Parallelizable version of PMAC (Parallelizable MAC)
@@ -23,7 +145,8 @@ void PMAC0(uint64_t k,             // secret key
            uint64_t k2,            // secret key for F2
            FILE *file,             // file to compute tag for
            long file_length,       // length of file
-           uint64_t *tag)          // output: tag
+           uint64_t *tag,          // output: tag
+           char *f1f2)             // F1 and F2 selection argument
 {
   uint64_t t = 0;  // intermediate tag value
   uint64_t mask = 0; // mask for computing current block
@@ -50,7 +173,14 @@ void PMAC0(uint64_t k,             // secret key
 
     mask = (mask + k) % P;
     r = (m + mask) % P;
-    t ^= F1(k1, r);
+
+    if (strcmp(f1f2, "otp") == 0) {
+      t ^= F1_OTP(k1, r);
+    } else if (strcmp(f1f2, "vigenere") == 0) {
+      t ^= F1_vigenere(k1, r);
+    } else if (strcmp(f1f2, "rc4") == 0) {
+      t ^= F1_RC4(k1, r);
+    }
 
     i += size;
     fseek(file, rank + i, SEEK_SET);
@@ -64,7 +194,14 @@ void PMAC0(uint64_t k,             // secret key
 
     mask = (mask + k) % P;
     r = (m + mask) % P;
-    t ^= F1(k1, r);
+
+    if (strcmp(f1f2, "otp") == 0) {
+      t ^= F1_OTP(k1, r);
+    } else if (strcmp(f1f2, "vigenere") == 0) {
+      t ^= F1_vigenere(k1, r);
+    } else if (strcmp(f1f2, "rc4") == 0) {
+      t ^= F1_RC4(k1, r);
+    }
 
     // Pad with 0 bytes so that total number of blocks (including padding)
     // is divisible by the number of processes
@@ -74,7 +211,14 @@ void PMAC0(uint64_t k,             // secret key
       m = 0;
       mask = (mask + k) % P;
       r = (m + mask) % P;
-      t ^= F1(k1, r);
+
+      if (strcmp(f1f2, "otp") == 0) {
+        t ^= F1_OTP(k1, r);
+      } else if (strcmp(f1f2, "vigenere") == 0) {
+        t ^= F1_vigenere(k1, r);
+      } else if (strcmp(f1f2, "rc4") == 0) {
+        t ^= F1_RC4(k1, r);
+      }
     }
   }
 
@@ -82,15 +226,22 @@ void PMAC0(uint64_t k,             // secret key
   MPI_Reduce(&t, tag, 1, MPI_UNSIGNED_LONG_LONG, MPI_BXOR, 0, MPI_COMM_WORLD);
 
   // Final tag computation
-  if (rank == 0)
-    *tag = F2(k2, *tag);
+  if (rank == 0) {
+    if (strcmp(f1f2, "otp") == 0) {
+      *tag = F2_OTP(k2, *tag);
+    } else if (strcmp(f1f2, "vigenere") == 0) {
+      *tag = F2_vigenere(k2, *tag);
+    } else if (strcmp(f1f2, "rc4") == 0) {
+      *tag = F2_RC4(k2, *tag);
+    }
+  }
 }
 
 int main(int argc, char** argv)
 {
-  if (argc < 3 || argc > 4)
+  if (argc < 4 || argc > 5)
   {
-    fprintf(stderr, "Usage: %s <sign|verify> <filepath> [<tagfilepath>]\n", argv[0]);
+    fprintf(stderr, "Usage: %s <sign|verify> <filepath> <f1f2(otp|vigenere|rc4)> [<tagfilepath>]\n", argv[0]);
     return 1;
   }
 
@@ -114,7 +265,7 @@ int main(int argc, char** argv)
   long file_length = ftell(file);
   rewind(file);
 
-  PMAC0(k, k1, k2, file, file_length, &tag);
+  PMAC0(k, k1, k2, file, file_length, &tag, argv[3]);
 
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -132,47 +283,41 @@ int main(int argc, char** argv)
       FILE *tagfile = fopen(tagfilename, "w");
       if (!tagfile)
       {
-        perror("Failed to open tag file for writing");
+        perror("Failed to create tag file");
         return 1;
       }
 
       fprintf(tagfile, "%llu\n", tag);
       fclose(tagfile);
-
-      printf("Tag written to: %s\n", tagfilename);
     }
     else if (strcmp(argv[1], "verify") == 0)
     {
       // "verify" mode
-      if (argc != 4)
+      if (argc < 5)
       {
-        fprintf(stderr, "Usage: %s verify <filepath> <tagfilepath>\n", argv[0]);
+        fprintf(stderr, "Usage: %s verify <filepath> <f1f2(otp|vigenere|rc4)> <tagfilepath>\n", argv[0]);
         return 1;
       }
 
-      FILE *tagfile = fopen(argv[3], "r");
-      if (!tagfile)
+      uint64_t expected_tag;
+      FILE *expected_tagfile = fopen(argv[4], "r");
+      if (!expected_tagfile)
       {
-        perror("Failed to open tag file for reading");
+        perror("Failed to open expected tag file");
         return 1;
       }
 
-      uint64_t old_tag;
-      if (fscanf(tagfile, "%llu", &old_tag) != 1)
-      {
-        fprintf(stderr, "Failed to read tag from tag file\n");
-        return 1;
-      }
+      fscanf(expected_tagfile, "%llu", &expected_tag);
+      fclose(expected_tagfile);
 
-      if (tag == old_tag)
-      { printf("Tag verification succeeded\n"); }
+      if (tag == expected_tag)
+      {
+        printf("Tag is valid\n");
+      }
       else
-      { printf("Tag verification failed\n"); }
-    }
-    else
-    {
-      fprintf(stderr, "Invalid mode. Please use either 'sign' or 'verify'\n");
-      return 1;
+      {
+        printf("Tag is NOT valid\n");
+      }
     }
   }
 
